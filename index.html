@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>建筑项目库 · 用途筛选 + 面积排序</title>
+<link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+<link rel="stylesheet" href="https://unpkg.com/element-plus/theme-chalk/dark/css-vars.css" />
+<style>
+  :root {
+    --page-bg: #f5f7fa;
+    --card-bg: #ffffff;
+    --text: #1f2329;
+    --text-sub: #606266;
+    --border: #e4e7ed;
+  }
+  html.dark {
+    --page-bg: #141414;
+    --card-bg: #1d1e1f;
+    --text: #e5eaf3;
+    --text-sub: #a3a6ad;
+    --border: #414243;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 48px;
+    background: var(--page-bg);
+    color: var(--text);
+    font-family: -apple-system, "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    transition: background .2s, color .2s;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  .head {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 16px;
+  }
+  .head h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; }
+  .head p { margin: 0; font-size: 13px; color: var(--text-sub); }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .toolbar .grow { flex: 1 1 auto; }
+  .count { font-size: 13px; color: var(--text-sub); white-space: nowrap; }
+  .count b { color: var(--text); font-weight: 600; }
+  .pager { display: flex; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; gap: 8px; }
+  .hint { font-size: 12px; color: var(--text-sub); margin-top: 10px; }
+  .el-table__body .el-table__row { cursor: pointer; }
+
+  .detail-top { display: flex; align-items: center; gap: 14px; margin-top: 18px; margin-bottom: 18px; }
+  .logo {
+    width: 52px; height: 52px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    background: #409eff; color: #fff; font-size: 15px; font-weight: 600; flex: 0 0 auto;
+  }
+  .logo.residential { background: #409eff; }
+  .logo.commercial { background: #e6a23c; }
+  .logo.industrial { background: #909399; }
+  .detail-top h2 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+  .detail-top .sub { font-size: 13px; color: var(--text-sub); }
+  .intro {
+    margin-top: 16px; padding: 12px 14px; border-radius: 8px;
+    background: rgba(125, 125, 125, .08);
+    font-size: 13px; line-height: 1.8; color: var(--text-sub);
+  }
+  .nav { display: flex; align-items: center; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+  .nav .pos { font-size: 13px; color: var(--text-sub); }
+  .stats {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px; margin-bottom: 14px;
+  }
+  .stat-card {
+    border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
+    background: rgba(125, 125, 125, .04);
+  }
+  .stat-card .label { font-size: 12px; color: var(--text-sub); }
+  .stat-card .value {
+    font-size: 24px; font-weight: 600; color: var(--text);
+    margin: 5px 0 3px; line-height: 1.2;
+  }
+  .stat-card .value small { font-size: 13px; font-weight: 400; color: var(--text-sub); margin-left: 3px; }
+  .stat-card .foot { font-size: 12px; color: var(--text-sub); }
+  .dist-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text-sub); padding: 5px 0; cursor: pointer;
+  }
+  .dist-row:hover { color: var(--text); }
+  .dist-row .name { width: 30px; flex: 0 0 auto; color: var(--text); }
+  .dist-row .bar {
+    flex: 1 1 auto; height: 8px; border-radius: 4px;
+    background: rgba(125, 125, 125, .18); overflow: hidden;
+  }
+  .dist-row .bar i { display: block; height: 100%; border-radius: 4px; }
+  .dist-row .num { width: 88px; flex: 0 0 auto; text-align: right; }
+  .dist-row.is-off { opacity: .42; }
+  .dist-row.is-on { color: var(--text); font-weight: 500; }
+
+  .fade-enter-active, .fade-leave-active { transition: opacity .18s ease, transform .18s ease; }
+  .fade-enter-from { opacity: 0; transform: translateY(6px); }
+  .fade-leave-to { opacity: 0; transform: translateY(-6px); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<!-- ===== 列表页 ===== -->
+<script type="text/x-template" id="tpl-list">
+  <div class="card">
+    <div class="toolbar">
+      <el-radio-group v-model="useType" size="default">
+        <el-radio-button v-for="u in useTypes" :key="u.value" :label="u.value">{{ u.text }}</el-radio-button>
+      </el-radio-group>
+
+      <el-input v-model="keyword" placeholder="搜索项目名 / 城市 / 设计单位" clearable style="width: 250px">
+        <template #prefix>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+               stroke="#a8abb2" stroke-width="2" stroke-linecap="round">
+            <circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" />
+          </svg>
+        </template>
+      </el-input>
+
+      <el-button @click="reset">重置</el-button>
+
+      <span class="grow"></span>
+
+      <span class="count">命中 <b>{{ filteredData.length }}</b> 个 / 共 <b>{{ projects.length }}</b> 个</span>
+    </div>
+
+    <div class="stats">
+      <div class="stat-card">
+        <div class="label">项目总数</div>
+        <div class="value">{{ filteredData.length }}<small>个</small></div>
+        <div class="foot">全库 {{ projects.length }} 个 · 平均单体 {{ avgAreaText }}</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="label">总建筑面积</div>
+        <div class="value">{{ totalAreaText }}</div>
+        <div class="foot">最大 {{ maxAreaText }} · 最小 {{ minAreaText }}</div>
+      </div>
+
+      <div class="stat-card">
+        <div class="label">用途分布<span style="opacity:.65">（全库 · 点击可筛选）</span></div>
+        <div style="margin-top: 6px">
+          <div
+            v-for="d in distData"
+            :key="d.name"
+            class="dist-row"
+            :class="{ 'is-on': useType === d.name, 'is-off': useType !== 'all' && useType !== d.name }"
+            @click="toggleUse(d.name)">
+            <span class="name">{{ d.name }}</span>
+            <span class="bar"><i :style="{ width: d.pct + '%', background: d.color }"></i></span>
+            <span class="num">{{ d.count }} 个 · {{ d.pct }}%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <el-table
+      :data="pagedData"
+      border stripe
+      :default-sort="{ prop: 'area', order: 'descending' }"
+      @sort-change="onSortChange"
+      @row-click="goDetail"
+      style="width: 100%">
+
+      <el-table-column type="index" label="#" width="52" align="center" />
+      <el-table-column prop="name" label="项目名称" min-width="180" />
+      <el-table-column prop="useType" label="用途" min-width="82">
+        <template #default="{ row }">
+          <el-tag :type="useTagType(row.useType)" size="small" disable-transitions>{{ row.useType }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="city" label="城市" min-width="84" />
+      <el-table-column prop="area" label="建筑面积" min-width="128" sortable="custom" align="right">
+        <template #default="{ row }">{{ fmtArea(row.area) }}</template>
+      </el-table-column>
+      <el-table-column prop="floors" label="层数" min-width="78" align="right">
+        <template #default="{ row }">{{ row.floors }} 层</template>
+      </el-table-column>
+      <el-table-column prop="cost" label="总造价" min-width="112" sortable="custom" align="right">
+        <template #default="{ row }">{{ fmtCost(row.cost) }}</template>
+      </el-table-column>
+      <el-table-column prop="startDate" label="开工日期" min-width="116" sortable="custom" />
+      <el-table-column prop="status" label="状态" min-width="92">
+        <template #default="{ row }">
+          <el-tag :type="statusTagType(row.status)" size="small" disable-transitions>{{ row.status }}</el-tag>
+        </template>
+      </el-table-column>
+
+      <template #empty>
+        <span style="color: var(--text-sub)">没有匹配的项目，换个用途或关键词试试</span>
+      </template>
+    </el-table>
+
+    <div class="pager">
+      <el-pagination
+        v-model:current-page="currentPage"
+        v-model:page-size="pageSize"
+        :total="filteredData.length"
+        :page-sizes="[5, 10, 20, 50]"
+        layout="total, sizes, prev, pager, next, jumper"
+        background />
+    </div>
+
+    <p class="hint">点任意一行 → 进入项目详情（地址栏 #/project/编号，后退键可返回）</p>
+  </div>
+</script>
+
+<!-- ===== 详情页 ===== -->
+<script type="text/x-template" id="tpl-detail">
+  <div class="card">
+    <el-page-header @back="back">
+      <template #content>
+        <span style="font-size: 13px; color: var(--text-sub)">项目详情</span>
+      </template>
+    </el-page-header>
+
+    <template v-if="p">
+      <div class="detail-top">
+        <div class="logo" :class="logoClass">{{ p.useType }}</div>
+        <div>
+          <h2>
+            {{ p.name }}
+            <el-tag :type="statusTagType(p.status)" size="small" disable-transitions style="margin-left: 6px">
+              {{ p.status }}
+            </el-tag>
+          </h2>
+          <div class="sub">{{ p.code }} · {{ p.useType }} · {{ p.city }}</div>
+        </div>
+      </div>
+
+      <el-descriptions :column="2" border size="default">
+        <el-descriptions-item label="项目编号">{{ p.code }}</el-descriptions-item>
+        <el-descriptions-item label="项目名称">{{ p.name }}</el-descriptions-item>
+        <el-descriptions-item label="用途分类">{{ p.useType }}</el-descriptions-item>
+        <el-descriptions-item label="项目状态">{{ p.status }}</el-descriptions-item>
+        <el-descriptions-item label="城市">{{ p.city }}</el-descriptions-item>
+        <el-descriptions-item label="详细地址">{{ p.address }}</el-descriptions-item>
+        <el-descriptions-item label="建筑面积">{{ fmtArea(p.area) }}（{{ p.area.toLocaleString() }} ㎡）</el-descriptions-item>
+        <el-descriptions-item label="占地面积">{{ fmtArea(p.landArea) }}</el-descriptions-item>
+        <el-descriptions-item label="容积率">{{ p.plotRatio }}</el-descriptions-item>
+        <el-descriptions-item label="绿化率">{{ p.greenRate }}%</el-descriptions-item>
+        <el-descriptions-item label="地上层数">{{ p.floors }} 层</el-descriptions-item>
+        <el-descriptions-item label="建筑高度">{{ p.height }} m</el-descriptions-item>
+        <el-descriptions-item label="结构类型">{{ p.structure }}</el-descriptions-item>
+        <el-descriptions-item label="总造价">{{ fmtCost(p.cost) }}</el-descriptions-item>
+        <el-descriptions-item label="开工日期">{{ p.startDate }}</el-descriptions-item>
+        <el-descriptions-item label="竣工日期">{{ p.finishDate }}</el-descriptions-item>
+        <el-descriptions-item label="建设单位">{{ p.owner }}</el-descriptions-item>
+        <el-descriptions-item label="设计单位">{{ p.designOrg }}</el-descriptions-item>
+        <el-descriptions-item label="施工单位">{{ p.buildOrg }}</el-descriptions-item>
+        <el-descriptions-item label="项目负责人">{{ p.manager }}</el-descriptions-item>
+        <el-descriptions-item label="BIM 应用">{{ p.bim }}</el-descriptions-item>
+        <el-descriptions-item label="技术标签" :span="2">
+          <el-tag v-for="t in p.tags" :key="t" size="small" type="info" disable-transitions
+                  style="margin-right: 6px">{{ t }}</el-tag>
+        </el-descriptions-item>
+      </el-descriptions>
+
+      <div class="intro">{{ p.intro }}</div>
+
+      <div class="nav">
+        <el-button size="small" :disabled="!around.prev" @click="go(around.prev.id)">← 上一个</el-button>
+        <el-button size="small" :disabled="!around.next" @click="go(around.next.id)">下一个 →</el-button>
+        <span class="pos">按当前排序第 {{ around.index + 1 }} / {{ around.total }} 个</span>
+      </div>
+    </template>
+
+    <el-empty v-else description="找不到这个项目，可能编号不对">
+      <el-button type="primary" size="small" @click="back">返回列表</el-button>
+    </el-empty>
+  </div>
+</script>
+
+<!-- ===== 外壳 ===== -->
+<script type="text/x-template" id="tpl-app">
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <h1>建筑项目库</h1>
+        <p>按用途筛选（住宅 / 商业 / 工业）+ 按建筑面积排序，点行看完整指标</p>
+      </div>
+      <el-switch v-model="isDark" active-text="暗色" inactive-text="亮色" />
+    </div>
+
+    <router-view v-slot="{ Component }">
+      <transition name="fade" mode="out-in">
+        <component :is="Component" />
+      </transition>
+    </router-view>
+  </div>
+</script>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://unpkg.com/vue-router@4/dist/vue-router.global.prod.js"></script>
+<script src="https://unpkg.com/element-plus/dist/index.full.min.js"></script>
+<script src="https://unpkg.com/element-plus/dist/locale/zh-cn.js"></script>
+<script>
+const { createApp, ref, computed, watch } = Vue
+const { createRouter, createWebHashHistory, createMemoryHistory, useRoute, useRouter } = VueRouter
+
+/* ================== 假数据：68 个建筑项目 ================== */
+const CITIES = ['重庆', '成都', '西安', '武汉', '长沙', '杭州', '南京', '青岛', '深圳', '苏州']
+const DISTRICTS = ['高新区', '经开区', '滨江区', '临港新区', '中央商务区', '科教新城']
+const ROADS = ['建设大道', '人民路', '中山路', '科技大道', '产业一路', '滨江大道']
+const BRAND = ['华地', '云璟', '天玺', '锦绣', '星河', '金茂', '龙湖', '中海', '保利', '华润', '绿城', '招商']
+const MID = ['云枢', '天曜', '锦绣', '星屿', '未来', '中央', '沁园', '观澜']
+const SUFFIX = {
+  '住宅': ['府', '湾', '园', '公馆', '花园', '苑', '台', '里'],
+  '商业': ['广场', '中心', '天街', '汇', '大厦', 'MALL'],
+  '工业': ['产业园', '智造基地', '科技园', '物流园', '工业园']
+}
+const STATUS = ['已竣工', '已竣工', '在建', '在建', '在建', '待开工', '停工']
+const STRUCT = { '住宅': '剪力墙结构', '商业': '框架-核心筒', '工业': ['钢结构', '框架结构'] }
+const DESIGN = ['中南建筑设计院', '华东建筑设计研究院', '中国建筑设计研究院',
+                '同济建筑设计集团', '重庆市设计院', '广东省建筑设计研究院']
+const BUILD = ['中建三局', '中建八局', '中铁建设集团', '上海建工', '北京城建集团', '中天建设']
+const OWNER = ['华地置业', '城投集团', '高新控股', '产业投资集团', '房地产开发有限公司', '轨道交通置业']
+const TAGS = ['装配式建筑', '绿色建筑三星', '海绵城市', '智慧工地', 'BIM 正向设计',
+              '超低能耗', '近零碳', '全装修交付', '人车分流']
+const BIM = ['全专业正向设计', '施工图阶段应用', '仅碰撞检查', '未应用']
+
+function makeData(n) {
+  let seed = 20260928
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648
+  const pick = arr => arr[Math.floor(rnd() * arr.length)]
+  const pad = v => String(v).padStart(2, '0')
+  const addMonths = (s, m) => {
+    const [y, mo, d] = s.split('-').map(Number)
+    const dt = new Date(y, mo - 1 + m, d)
+    return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`
+  }
+
+  const list = []
+  for (let i = 0; i < n; i++) {
+    const useType = pick(['住宅', '住宅', '住宅', '商业', '商业', '工业'])
+    const status = pick(STATUS)
+
+    /* 面积：不同用途量级不同，排序才有意义 */
+    const area = useType === '住宅' ? 50000 + Math.floor(rnd() * 270000)
+      : useType === '商业' ? 30000 + Math.floor(rnd() * 130000)
+        : 80000 + Math.floor(rnd() * 370000)
+
+    /* 开工日期跟状态挂钩，别出现"已竣工但竣工日期在未来"这种笑话 */
+    let startY
+    if (status === '已竣工') startY = 2020 + Math.floor(rnd() * 4)
+    else if (status === '在建') startY = 2024 + Math.floor(rnd() * 2)
+    else if (status === '待开工') startY = 2026
+    else startY = 2022 + Math.floor(rnd() * 3)
+    const startMonth = status === '待开工' ? 10 + Math.floor(rnd() * 3) : 1 + Math.floor(rnd() * 12)
+    const startDate = `${startY}-${pad(startMonth)}-${pad(1 + Math.floor(rnd() * 28))}`
+
+    const months = useType === '住宅' ? 24 + Math.floor(rnd() * 14)
+      : useType === '商业' ? 30 + Math.floor(rnd() * 20)
+        : 12 + Math.floor(rnd() * 14)
+    const finishDate = (status === '已竣工') ? addMonths(startDate, months)
+      : (status === '在建') ? '预计 ' + addMonths(startDate, months) : '—'
+
+    const floors = useType === '住宅' ? 18 + Math.floor(rnd() * 18)
+      : useType === '商业' ? 4 + Math.floor(rnd() * 42)
+        : 1 + Math.floor(rnd() * 6)
+    const unit = useType === '住宅' ? 0.35 : useType === '商业' ? 0.55 : 0.22
+    const plotRatio = useType === '住宅' ? (1.8 + rnd() * 1.7).toFixed(2)
+      : useType === '商业' ? (3 + rnd() * 3).toFixed(2)
+        : (0.8 + rnd() * 0.8).toFixed(2)
+
+    const numTags = 1 + Math.floor(rnd() * 3)
+    const tags = []
+    while (tags.length < numTags) {
+      const t = pick(TAGS)
+      if (!tags.includes(t)) tags.push(t)
+    }
+
+    const designOrg = pick(DESIGN)
+    const buildOrg = pick(BUILD)
+    const manager = pick(['邹生', '小曼', '小王', '林薇', '郑凯', '何师傅'])
+    const phase = status === '已竣工' ? '已交付使用'
+      : status === '在建' ? '主体施工中'
+        : status === '待开工' ? '准备进场' : '暂停施工'
+
+    list.push({
+      id: i + 1,
+      code: `PRJ-${startY}-${String(101 + i)}`,
+      name: `${pick(BRAND)}·${pick(MID)}${pick(SUFFIX[useType])}`,
+      useType,
+      status,
+      city: pick(CITIES),
+      address: `${pick(DISTRICTS)}${pick(ROADS)}${1 + Math.floor(rnd() * 888)}号`,
+      area,
+      landArea: Math.round(area / Number(plotRatio)),
+      plotRatio,
+      greenRate: useType === '住宅' ? 30 + Math.floor(rnd() * 16)
+        : useType === '商业' ? 15 + Math.floor(rnd() * 16) : 10 + Math.floor(rnd() * 11),
+      floors,
+      height: Math.round(floors * (useType === '工业' ? 6.5 : useType === '商业' ? 4.2 : 3)),
+      structure: Array.isArray(STRUCT[useType]) ? pick(STRUCT[useType]) : STRUCT[useType],
+      cost: Math.round(area * unit * (0.85 + rnd() * 0.3)),
+      startDate,
+      finishDate,
+      owner: pick(OWNER),
+      designOrg,
+      buildOrg,
+      manager,
+      bim: pick(BIM),
+      tags,
+      intro: `${startY} 年开工的${useType}项目，总建筑面积约 ${(area / 10000).toFixed(1)} 万㎡，` +
+        `${floors} 层${useType === '工业' ? '厂房' : useType === '商业' ? '综合体' : '住宅'}，` +
+        `施工图由${designOrg}完成，项目目前${phase}。`
+    })
+  }
+  return list
+}
+
+/* file:// 打开时 localStorage 会抛 SecurityError，包一层兜底 */
+const LS = {
+  get(k, d) { try { return localStorage.getItem(k) ?? d } catch { return d } },
+  set(k, v) { try { localStorage.setItem(k, v) } catch {} }
+}
+
+const fmtArea = v => v >= 10000 ? (v / 10000).toFixed(1) + ' 万㎡' : v + ' ㎡'
+const fmtCost = v => v >= 10000 ? (v / 10000).toFixed(2) + ' 亿元' : v + ' 万元'
+const useTagType = u => ({ '住宅': 'primary', '商业': 'warning', '工业': 'info' }[u] || 'info')
+const statusTagType = s => ({ '已竣工': 'success', '在建': 'primary', '待开工': 'info', '停工': 'danger' }[s] || 'info')
+
+/* ============ 共享状态放在组件外：列表被路由销毁重建也不丢条件 ============ */
+const store = (() => {
+  const projects = ref(makeData(68))
+
+  const useType = ref('all')
+  const keyword = ref('')
+  const currentPage = ref(1)
+  const pageSize = ref(10)
+  const sortProp = ref('area')
+  const sortOrder = ref('descending')
+
+  const filteredData = computed(() => {
+    const kw = keyword.value.trim().toLowerCase()
+    return projects.value.filter(p => {
+      const hit = !kw
+        || p.name.toLowerCase().includes(kw)
+        || p.city.toLowerCase().includes(kw)
+        || p.designOrg.toLowerCase().includes(kw)
+      return hit && (useType.value === 'all' || p.useType === useType.value)
+    })
+  })
+
+  const sortedData = computed(() => {
+    if (!sortProp.value || !sortOrder.value) return filteredData.value
+    const dir = sortOrder.value === 'ascending' ? 1 : -1
+    const key = sortProp.value
+    /* 面积、造价、层数是数字，开工日期是字符串 —— 别一刀切用减法，字符串会算成 NaN */
+    return [...filteredData.value].sort((a, b) => {
+      const va = a[key], vb = b[key]
+      const cmp = (typeof va === 'number' && typeof vb === 'number')
+        ? va - vb
+        : (va > vb ? 1 : va < vb ? -1 : 0)
+      return cmp * dir
+    })
+  })
+
+  const pagedData = computed(() => {
+    const start = (currentPage.value - 1) * pageSize.value
+    return sortedData.value.slice(start, start + pageSize.value)
+  })
+
+  const sumArea = computed(() => filteredData.value.reduce((s, p) => s + p.area, 0))
+  const totalAreaText = computed(() => (sumArea.value / 10000).toFixed(1) + ' 万㎡')
+  const avgAreaText = computed(() => filteredData.value.length
+    ? fmtArea(Math.round(sumArea.value / filteredData.value.length)) : '—')
+  const maxAreaText = computed(() => filteredData.value.length
+    ? fmtArea(Math.max(...filteredData.value.map(p => p.area))) : '—')
+  const minAreaText = computed(() => filteredData.value.length
+    ? fmtArea(Math.min(...filteredData.value.map(p => p.area))) : '—')
+
+  watch([keyword, useType], () => { currentPage.value = 1 })
+
+  function onSortChange({ prop, order }) {
+    sortProp.value = prop
+    sortOrder.value = order
+    currentPage.value = 1
+  }
+
+  function reset() {
+    keyword.value = ''
+    useType.value = 'all'
+    currentPage.value = 1
+  }
+
+  /* 用途分布按全库统计：筛掉其它用途时也能看清整体结构，当前选中的那行高亮 */
+  const distData = computed(() => {
+    const all = projects.value
+    return [
+      { name: '住宅', color: '#409eff' },
+      { name: '商业', color: '#e6a23c' },
+      { name: '工业', color: '#909399' }
+    ].map(d => {
+      const count = all.filter(p => p.useType === d.name).length
+      return { ...d, count, pct: all.length ? Math.round(count / all.length * 100) : 0 }
+    })
+  })
+
+  /* 点分布行直接切换筛选，再点一次取消 */
+  function toggleUse(name) {
+    useType.value = useType.value === name ? 'all' : name
+  }
+
+  const findById = id => projects.value.find(p => p.id === Number(id))
+
+  function neighbors(id) {
+    const list = sortedData.value
+    const index = list.findIndex(p => p.id === Number(id))
+    return {
+      index,
+      total: list.length,
+      prev: index > 0 ? list[index - 1] : null,
+      next: index >= 0 && index < list.length - 1 ? list[index + 1] : null
+    }
+  }
+
+  return {
+    useTypes: [
+      { value: 'all', text: '全部用途' },
+      { value: '住宅', text: '住宅' },
+      { value: '商业', text: '商业' },
+      { value: '工业', text: '工业' }
+    ],
+    projects, useType, keyword, currentPage, pageSize,
+    filteredData, sortedData, pagedData,
+    totalAreaText, avgAreaText, maxAreaText, minAreaText, distData,
+    onSortChange, reset, toggleUse, findById, neighbors
+  }
+})()
+
+/* ================= 列表页 ================= */
+const ListPage = {
+  template: '#tpl-list',
+  setup() {
+    const router = useRouter()
+    const goDetail = row => router.push('/project/' + row.id)
+    return { ...store, goDetail, fmtArea, fmtCost, useTagType, statusTagType }
+  }
+}
+
+/* ================= 详情页 ================= */
+const DetailPage = {
+  template: '#tpl-detail',
+  setup() {
+    const route = useRoute()
+    const router = useRouter()
+    const p = computed(() => store.findById(route.params.id))
+    const around = computed(() => store.neighbors(route.params.id))
+    const logoClass = computed(() => {
+      if (!p.value) return ''
+      return { '住宅': 'residential', '商业': 'commercial', '工业': 'industrial' }[p.value.useType]
+    })
+    const go = id => router.replace('/project/' + id)
+    const back = () => router.push('/')
+    return { p, around, logoClass, go, back, fmtArea, fmtCost, statusTagType }
+  }
+}
+
+const App = {
+  template: '#tpl-app',
+  setup() {
+    const isDark = ref(LS.get('prj-dark', '0') === '1')
+    watch(isDark, v => {
+      document.documentElement.classList.toggle('dark', v)
+      LS.set('prj-dark', v ? '1' : '0')
+    }, { immediate: true })
+    return { isDark }
+  }
+}
+
+/* ================= 路由 ================= */
+const isFile = location.protocol === 'file:'
+const router = createRouter({
+  history: isFile ? createMemoryHistory() : createWebHashHistory(),
+  routes: [
+    { path: '/', name: 'list', component: ListPage },
+    { path: '/project/:id', name: 'detail', component: DetailPage },
+    { path: '/:pathMatch(.*)*', redirect: '/' }
+  ],
+  scrollBehavior: () => ({ top: 0 })
+})
+
+const app = createApp(App)
+app.use(ElementPlus, { locale: ElementPlusLocaleZhCn })
+app.use(router)
+app.mount('#app')
+
+if (isFile) {
+  const start = location.hash.slice(1) || '/'
+  if (start !== '/') router.replace(start)
+  router.afterEach(to => {
+    const h = '#' + to.fullPath
+    if (location.hash !== h) location.hash = h
+  })
+  window.addEventListener('hashchange', () => {
+    const p = location.hash.slice(1) || '/'
+    if (router.currentRoute.value.fullPath !== p) router.push(p)
+  })
+}
+</script>
+</body>
+</html>
